@@ -7,18 +7,7 @@ from json import JSONEncoder
 import requests
 from bs4 import BeautifulSoup
 
-clubs = [
-    {
-        "id": "nagasaki",
-        "category": "j2",
-        "name": "長崎"
-    },
-    {
-        "id": "kawasakif",
-        "category": "j1",
-        "name": "川崎F"
-    },
-]
+from source import clubs
 
 
 class ClubOutput:
@@ -29,11 +18,12 @@ class ClubOutput:
 
 
 class MatchDay:
-    def __init__(self, location, date, time, opponent):
+    def __init__(self, location, date, time, opponent, is_home):
         self.location = location
-        self.date = date.isoformat()
+        self.date = date if date == "TBD" else date.isoformat()
         self.time = time
         self.opponent = opponent
+        self.is_home = is_home
 
 
 class TypeEncoder(JSONEncoder):
@@ -71,10 +61,15 @@ def get_opponent_name(own_name, left, right):
         return left
 
 
+output_list = []
+
 for c in clubs:
     match_days = []
     for b in get_content():
-        date = datetime.datetime.strptime(extract_jp_date(b), '%Y年%m月%d日').date()
+        try:
+            date = datetime.datetime.strptime(extract_jp_date(b), '%Y年%m月%d日').date()
+        except ValueError:
+            date = "TBD"
 
         stadium = get_stadium(b)
 
@@ -82,8 +77,13 @@ for c in clubs:
         left = game_table.find('td', {'class': 'clubName leftside'}).find('a').get_text()
         right = game_table.find('td', {'class': 'clubName rightside'}).find('a').get_text()
         opponent = get_opponent_name(c.get("name"), left, right)
+        is_home = opponent == right
 
-        match_days.append(MatchDay(stadium[1], date, stadium[0], opponent))
+        match_days.append(MatchDay(stadium[1], date, stadium[0], opponent, is_home))
 
-    output = ClubOutput(c.get("id"), c.get("category"), match_days)
-    print(json.dumps(output.__dict__, ensure_ascii=False, indent=4, cls=TypeEncoder))
+    output_list.append(ClubOutput(c.get("id"), c.get("category"), match_days))
+
+json_output = json.dumps(output_list, ensure_ascii=False, indent=4, cls=TypeEncoder)
+
+f = open("output.json", 'w')
+f.write(json_output)
